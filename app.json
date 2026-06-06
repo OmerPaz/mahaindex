@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "mahaindex",
+    "name": "Ma Haindex",
     "slug": "mahaindex",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -8,7 +8,10 @@
     "scheme": "mahaindex",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Ma Haindex needs your location to show the UV index where you are."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -25,6 +28,7 @@
     },
     "plugins": [
       "expo-router",
+      "expo-location",
       [
         "expo-splash-screen",
         {
