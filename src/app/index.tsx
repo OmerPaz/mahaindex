@@ -296,6 +296,7 @@ export default function HomeScreen() {
   const [loading,      setLoading]      = useState(true);
   const [error,        setError]        = useState<string | null>(null);
   const [forecasts,    setForecasts]    = useState<DayForecast[]>([]);
+  const [currentUV,   setCurrentUV]    = useState<number>(0);
   const [city,         setCity]         = useState('');
   const [selectedDay,  setSelectedDay]  = useState(0);
   const [openAccordion, setOpenAccordion] = useState<number>(0);
@@ -323,10 +324,11 @@ export default function HomeScreen() {
       }
 
       const [uvRes, name] = await Promise.all([
-        fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&hourly=uv_index&forecast_days=7&timezone=auto`),
+        fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=uv_index&hourly=uv_index&forecast_days=7&timezone=auto`),
         ipCity ? Promise.resolve(ipCity) : getCityName(latitude, longitude),
       ]);
       const uvData = await uvRes.json();
+      setCurrentUV(Math.round(uvData.current?.uv_index ?? 0));
       setForecasts(parseForecasts(uvData));
       setCity(name);
       setSelectedDay(0);
@@ -362,9 +364,9 @@ export default function HomeScreen() {
     );
   }
 
-  const day     = forecasts[selectedDay];
-  const peak    = Math.round(day.peakUV);
-  const meta    = getUVMeta(peak);
+  const day      = forecasts[selectedDay];
+  const peak     = Math.round(day.peakUV);
+  const heroMeta = getUVMeta(currentUV);
 
   // Protection window: hours where UV > 3
   const protHours = day.hourly.filter(h => h.uv > 3);
@@ -397,10 +399,10 @@ export default function HomeScreen() {
             <Text style={s.cardLabel}>Current UV Status</Text>
             <View style={s.heroRow}>
               <View style={{ flex: 1 }}>
-                <Text style={[s.heroNumber, { color: meta.uvColor }]}>{peak}</Text>
-                <Text style={[s.heroLabel, { color: meta.uvColor }]}>{meta.label}</Text>
+                <Text style={[s.heroNumber, { color: heroMeta.uvColor }]}>{currentUV}</Text>
+                <Text style={[s.heroLabel, { color: heroMeta.uvColor }]}>{heroMeta.label}</Text>
               </View>
-              <SunIcon size={80} color={meta.uvColor} />
+              <SunIcon size={80} color={heroMeta.uvColor} />
             </View>
             <View style={s.heroDivider} />
             <Text style={s.heroMeta}>{city ? `${city}  •  ` : ''}{todayLabel}</Text>
