@@ -86,6 +86,27 @@ async function getCityName(lat: number, lon: number): Promise<string> {
   }
 }
 
+// Returns coords from browser geolocation, or falls back to IP geolocation.
+// Also returns a city name from ipapi.co when falling back (avoids a second fetch).
+async function resolveWebLocation(): Promise<{ latitude: number; longitude: number; ipCity?: string }> {
+  if (typeof navigator !== 'undefined' && navigator.geolocation) {
+    try {
+      const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: false,
+          timeout: 8000,
+          maximumAge: 300_000,
+        })
+      );
+      return { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+    } catch { /* denied or timed out — fall through to IP */ }
+  }
+  const r = await fetch('https://ipapi.co/json/');
+  const d = await r.json();
+  if (!d.latitude || !d.longitude) throw new Error('IP geolocation failed');
+  return { latitude: d.latitude, longitude: d.longitude, ipCity: d.city || d.region };
+}
+
 function parseForecasts(data: { hourly: { time: string[]; uv_index: number[] } }): DayForecast[] {
   const byDate = new Map<string, HourlyUV[]>();
   data.hourly.time.forEach((t, i) => {
@@ -284,13 +305,26 @@ export default function HomeScreen() {
     setLoading(true);
     setError(null);
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') { setError('Location access denied.\nEnable it in Settings.'); return; }
-      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      const { latitude, longitude } = pos.coords;
+      let latitude: number;
+      let longitude: number;
+      let ipCity: string | undefined;
+
+      if (Platform.OS === 'web') {
+        const loc = await resolveWebLocation();
+        latitude = loc.latitude;
+        longitude = loc.longitude;
+        ipCity = loc.ipCity;
+      } else {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') { setError('Location access denied.\nEnable it in Settings.'); return; }
+        const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        latitude = pos.coords.latitude;
+        longitude = pos.coords.longitude;
+      }
+
       const [uvRes, name] = await Promise.all([
         fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&hourly=uv_index&forecast_days=7&timezone=auto`),
-        getCityName(latitude, longitude),
+        ipCity ? Promise.resolve(ipCity) : getCityName(latitude, longitude),
       ]);
       const uvData = await uvRes.json();
       setForecasts(parseForecasts(uvData));
