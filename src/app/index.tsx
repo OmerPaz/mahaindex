@@ -7,6 +7,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -42,6 +43,15 @@ const CARD_SHADOW = Platform.OS === 'web'
 
 // ── Types ─────────────────────────────────────────────────────────────
 interface HourlyUV { hour: number; uv: number; }
+
+interface GeoResult {
+  id: number;
+  name: string;
+  latitude: number;
+  longitude: number;
+  country: string;
+  admin1?: string;
+}
 interface DayForecast {
   date: Date;
   dateStr: string;
@@ -105,6 +115,15 @@ async function resolveWebLocation(): Promise<{ latitude: number; longitude: numb
   const d = await r.json();
   if (!d.latitude || !d.longitude) throw new Error('IP geolocation failed');
   return { latitude: d.latitude, longitude: d.longitude, ipCity: d.city || d.region };
+}
+
+async function searchCities(query: string): Promise<GeoResult[]> {
+  if (query.trim().length < 2) return [];
+  const r = await fetch(
+    `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query.trim())}&count=6&language=en&format=json`
+  );
+  const d = await r.json();
+  return d.results ?? [];
 }
 
 function parseForecasts(data: { hourly: { time: string[]; uv_index: number[] } }): DayForecast[] {
@@ -293,14 +312,18 @@ const acc = StyleSheet.create({
 
 // ── HomeScreen ────────────────────────────────────────────────────────
 export default function HomeScreen() {
-  const [loading,      setLoading]      = useState(true);
-  const [error,        setError]        = useState<string | null>(null);
-  const [forecasts,    setForecasts]    = useState<DayForecast[]>([]);
-  const [currentUV,   setCurrentUV]    = useState<number>(0);
-  const [city,         setCity]         = useState('');
-  const [selectedDay,  setSelectedDay]  = useState(0);
+  const [loading,       setLoading]       = useState(true);
+  const [error,         setError]         = useState<string | null>(null);
+  const [forecasts,     setForecasts]     = useState<DayForecast[]>([]);
+  const [currentUV,     setCurrentUV]     = useState<number>(0);
+  const [city,          setCity]          = useState('');
+  const [selectedDay,   setSelectedDay]   = useState(0);
   const [openAccordion, setOpenAccordion] = useState<number>(0);
-  const [chartWidth,   setChartWidth]   = useState(320);
+  const [chartWidth,    setChartWidth]    = useState(320);
+  const [showSearch,    setShowSearch]    = useState(false);
+  const [searchQuery,   setSearchQuery]   = useState('');
+  const [searchResults, setSearchResults] = useState<GeoResult[]>([]);
+  const [searching,     setSearching]     = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -338,6 +361,44 @@ export default function HomeScreen() {
       setLoading(false);
     }
   }, []);
+
+  const loadCity = useCallback(async (lat: number, lon: number, name: string) => {
+    setShowSearch(false);
+    setSearchQuery('');
+    setSearchResults([]);
+    setLoading(true);
+    setError(null);
+    try {
+      const uvRes = await fetch(
+        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=uv_index&hourly=uv_index&forecast_days=7&timezone=auto`
+      );
+      const uvData = await uvRes.json();
+      setCurrentUV(Math.round(uvData.current?.uv_index ?? 0));
+      setForecasts(parseForecasts(uvData));
+      setCity(name);
+      setSelectedDay(0);
+    } catch {
+      setError('Could not fetch UV data.\nCheck your connection and try again.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Debounced city search
+  useEffect(() => {
+    if (searchQuery.trim().length < 2) { setSearchResults([]); return; }
+    setSearching(true);
+    const t = setTimeout(async () => {
+      try {
+        setSearchResults(await searchCities(searchQuery));
+      } catch {
+        setSearchResults([]);
+      } finally {
+        setSearching(false);
+      }
+    }, 350);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -389,10 +450,64 @@ export default function HomeScreen() {
         <View style={s.inner}>
 
           {/* ── App bar ── */}
-          <View style={s.appBar}>
-            <Text style={s.appBarTitle}>Ma Haindex</Text>
-            <SunIcon size={28} color={M3.primary} />
-          </View>
+          {showSearch ? (
+            <View style={s.searchBar}>
+              <Text style={s.searchIcon}>🔍</Text>
+              <TextInput
+                style={s.searchInput}
+                placeholder="Search city..."
+                placeholderTextColor={M3.onSurfaceVariant}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                autoFocus
+              />
+              {searching
+                ? <ActivityIndicator size="small" color={M3.primary} />
+                : <TouchableOpacity onPress={() => { setShowSearch(false); setSearchQuery(''); setSearchResults([]); }}>
+                    <Text style={s.searchClose}>✕</Text>
+                  </TouchableOpacity>
+              }
+            </View>
+          ) : (
+            <View style={s.appBar}>
+              <Text style={s.appBarTitle}>Ma Haindex</Text>
+              <TouchableOpacity onPress={() => setShowSearch(true)} hitSlop={12}>
+                <Text style={s.searchIconBtn}>🔍</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* ── Search results ── */}
+          {showSearch && (
+            <View style={s.card}>
+              <TouchableOpacity style={s.resultRow} onPress={() => { setShowSearch(false); setSearchQuery(''); setSearchResults([]); load(); }}>
+                <Text style={s.resultIcon}>📍</Text>
+                <View>
+                  <Text style={[s.resultName, { color: M3.primary }]}>Use my location</Text>
+                </View>
+              </TouchableOpacity>
+              {searchResults.map((r, i) => {
+                const subtitle = [r.admin1, r.country].filter(Boolean).join(', ');
+                const label    = r.admin1 ? `${r.name}, ${r.admin1}` : `${r.name}, ${r.country}`;
+                return (
+                  <TouchableOpacity
+                    key={r.id}
+                    style={[s.resultRow, i > 0 && { borderTopWidth: 1, borderTopColor: M3.outlineVariant }]}
+                    onPress={() => loadCity(r.latitude, r.longitude, label)}
+                  >
+                    <Text style={s.resultIcon}>🏙</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.resultName}>{r.name}</Text>
+                      <Text style={s.resultSub}>{subtitle}</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+              {searchQuery.length >= 2 && !searching && searchResults.length === 0 && (
+                <Text style={s.noResults}>No cities found</Text>
+              )}
+            </View>
+          )}
 
           {/* ── Card A: Hero ── */}
           <View style={s.card}>
@@ -520,6 +635,18 @@ const s = StyleSheet.create({
   protRow:       { flexDirection: 'row', alignItems: 'flex-start', gap: 14 },
   protIcon:      { fontSize: 24, marginTop: 2 },
   protText:      { flex: 1, fontSize: 14, lineHeight: 22, color: M3.onSurface },
+
+  // Search
+  searchBar:     { flexDirection: 'row', alignItems: 'center', backgroundColor: M3.surface, borderRadius: 28, paddingHorizontal: 16, paddingVertical: 10, gap: 10, ...CARD_SHADOW },
+  searchIcon:    { fontSize: 16 },
+  searchInput:   { flex: 1, fontSize: 16, color: M3.onSurface, outlineStyle: 'none' } as any,
+  searchClose:   { fontSize: 16, color: M3.onSurfaceVariant, paddingLeft: 4 },
+  searchIconBtn: { fontSize: 20 },
+  resultRow:     { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, gap: 14 },
+  resultIcon:    { fontSize: 18, width: 24, textAlign: 'center' },
+  resultName:    { fontSize: 15, fontWeight: '500', color: M3.onSurface },
+  resultSub:     { fontSize: 13, color: M3.onSurfaceVariant, marginTop: 1 },
+  noResults:     { fontSize: 14, color: M3.onSurfaceVariant, paddingVertical: 12, textAlign: 'center' },
 
   // Loading / error
   center:        { flex: 1, backgroundColor: M3.background, alignItems: 'center', justifyContent: 'center', gap: 16, padding: 32 },
