@@ -9,6 +9,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  useColorScheme,
   View,
 } from 'react-native';
 import Svg, {
@@ -96,24 +97,62 @@ const TR = {
   },
 } as const;
 
-// ── M3 Theme ──────────────────────────────────────────────────────────
-const M3 = {
-  background:         '#F4EFF8',
-  surface:            '#FFFBFE',
-  surfaceVariant:     '#E7E0EC',
-  primaryContainer:   '#EADDFF',
-  onPrimaryContainer: '#21005D',
-  primary:            '#6750A4',
-  outline:            '#79747E',
-  outlineVariant:     '#CAC4D0',
-  onSurface:          '#1C1B1F',
-  onSurfaceVariant:   '#49454F',
-  tonal:              '#F0EBF6',
-};
+// ── Theme ─────────────────────────────────────────────────────────────
+type ColorScheme = 'light' | 'dark';
 
-const CARD_SHADOW = Platform.OS === 'web'
+interface Theme {
+  background:         string;
+  surface:            string;
+  surfaceVariant:     string;
+  primaryContainer:   string;
+  onPrimaryContainer: string;
+  primary:            string;
+  outline:            string;
+  outlineVariant:     string;
+  onSurface:          string;
+  onSurfaceVariant:   string;
+  tonal:              string;
+  cardShadow:         object;
+}
+
+const lightShadow = Platform.OS === 'web'
   ? ({ boxShadow: '0px 1px 4px rgba(0,0,0,0.10)' } as object)
-  : { elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 4 };
+  : { elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.10, shadowRadius: 4 };
+
+const darkShadow = Platform.OS === 'web'
+  ? ({ boxShadow: '0px 2px 8px rgba(0,0,0,0.50)' } as object)
+  : { elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.40, shadowRadius: 6 };
+
+const THEME: Record<ColorScheme, Theme> = {
+  light: {
+    background:         '#F4EFF8',
+    surface:            '#FFFBFE',
+    surfaceVariant:     '#E7E0EC',
+    primaryContainer:   '#EADDFF',
+    onPrimaryContainer: '#21005D',
+    primary:            '#6750A4',
+    outline:            '#79747E',
+    outlineVariant:     '#CAC4D0',
+    onSurface:          '#1C1B1F',
+    onSurfaceVariant:   '#49454F',
+    tonal:              '#F0EBF6',
+    cardShadow:         lightShadow,
+  },
+  dark: {
+    background:         '#141218',
+    surface:            '#1D1B20',
+    surfaceVariant:     '#49454F',
+    primaryContainer:   '#4F378B',
+    onPrimaryContainer: '#EADDFF',
+    primary:            '#D0BCFF',
+    outline:            '#938F99',
+    outlineVariant:     '#49454F',
+    onSurface:          '#E6E1E5',
+    onSurfaceVariant:   '#CAC4D0',
+    tonal:              '#2B2930',
+    cardShadow:         darkShadow,
+  },
+};
 
 // ── Types ─────────────────────────────────────────────────────────────
 interface HourlyUV { hour: number; uv: number; }
@@ -135,7 +174,6 @@ interface GeoResult {
   admin1?: string;
 }
 
-// ── Constants ─────────────────────────────────────────────────────────
 const MAX_UV = 12;
 
 // ── Helpers ───────────────────────────────────────────────────────────
@@ -230,7 +268,7 @@ function splinePath(pts: { x: number; y: number }[]): string {
 }
 
 // ── Sun Icon ──────────────────────────────────────────────────────────
-function SunIcon({ size = 72, color = M3.primary }: { size?: number; color?: string }) {
+function SunIcon({ size = 72, color }: { size?: number; color: string }) {
   const c = size / 2, r = size * 0.22, inner = size * 0.33, outer = size * 0.46, sw = size * 0.04;
   return (
     <Svg width={size} height={size}>
@@ -252,7 +290,7 @@ function SunIcon({ size = 72, color = M3.primary }: { size?: number; color?: str
 const SVG_H = 200;
 const L = 62, R = 8, T = 10, B = 24;
 
-function UVChart({ hourly, width, lang }: { hourly: HourlyUV[]; width: number; lang: Lang }) {
+function UVChart({ hourly, width, lang, theme }: { hourly: HourlyUV[]; width: number; lang: Lang; theme: Theme }) {
   const tr = TR[lang];
   const plotW = width - L - R, plotH = SVG_H - T - B;
   const toX = (h: number) => L + (h / 23) * plotW;
@@ -268,6 +306,11 @@ function UVChart({ hourly, width, lang }: { hourly: HourlyUV[]; width: number; l
   const peakX = peak ? toX(peak.hour) : 0;
   const peakY = peak ? toY(peak.uv) : 0;
   const peakV = peak ? Math.round(peak.uv) : 0;
+
+  const isDark    = theme.background === THEME.dark.background;
+  const gridColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)';
+  const lblColor  = isDark ? 'rgba(255,255,255,0.40)' : 'rgba(0,0,0,0.38)';
+  const axisColor = isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.45)';
 
   const thresholds = [
     { uv: 2,  label: tr.low },
@@ -299,58 +342,69 @@ function UVChart({ hourly, width, lang }: { hourly: HourlyUV[]; width: number; l
       </Defs>
       {thresholds.map(th => (
         <G key={th.label}>
-          <Line x1={L} y1={toY(th.uv)} x2={width - R} y2={toY(th.uv)} stroke="rgba(0,0,0,0.07)" strokeWidth={1} />
-          <SvgText x={L - 5} y={toY(th.uv) + 4} fontSize={9} fill="rgba(0,0,0,0.38)" textAnchor="end">{th.label}</SvgText>
+          <Line x1={L} y1={toY(th.uv)} x2={width - R} y2={toY(th.uv)} stroke={gridColor} strokeWidth={1} />
+          <SvgText x={L - 5} y={toY(th.uv) + 4} fontSize={9} fill={lblColor} textAnchor="end">{th.label}</SvgText>
         </G>
       ))}
       {[6, 12, 18].map(h => (
-        <Line key={h} x1={toX(h)} y1={T} x2={toX(h)} y2={T + plotH} stroke="rgba(0,0,0,0.08)" strokeWidth={1} strokeDasharray="3,3" />
+        <Line key={h} x1={toX(h)} y1={T} x2={toX(h)} y2={T + plotH} stroke={gridColor} strokeWidth={1} strokeDasharray="3,3" />
       ))}
       {fill  && <Path d={fill}  fill="url(#uvFill)" />}
       {curve && <Path d={curve} fill="none" stroke="url(#uvStroke)" strokeWidth={2.5} strokeLinecap="round" />}
       {peakV > 0 && (
         <G>
-          <Circle cx={peakX} cy={peakY} r={5} fill="#FF2D55" stroke="white" strokeWidth={2} />
-          <SvgText x={peakX} y={peakY - 10} fontSize={12} fontWeight="600" fill={M3.onSurface} textAnchor="middle">{peakV}</SvgText>
+          <Circle cx={peakX} cy={peakY} r={5} fill="#FF2D55" stroke={theme.surface} strokeWidth={2} />
+          <SvgText x={peakX} y={peakY - 10} fontSize={12} fontWeight="600" fill={theme.onSurface} textAnchor="middle">{peakV}</SvgText>
         </G>
       )}
       {([{ h: 0, label: '12 AM' }, { h: 6, label: '6 AM' }, { h: 12, label: '12 PM' }, { h: 18, label: '6 PM' }]).map(({ h, label }) => (
-        <SvgText key={h} x={toX(h)} y={T + plotH + 16} fontSize={10} fill="rgba(0,0,0,0.45)" textAnchor="middle">{label}</SvgText>
+        <SvgText key={h} x={toX(h)} y={T + plotH + 16} fontSize={10} fill={axisColor} textAnchor="middle">{label}</SvgText>
       ))}
     </Svg>
   );
 }
 
 // ── Accordion Row ─────────────────────────────────────────────────────
-function AccordionRow({ title, body, open, onToggle, link = false, noBorder = false }: {
-  title: string; body: string; open: boolean; onToggle: () => void; link?: boolean; noBorder?: boolean;
+function AccordionRow({ title, body, open, onToggle, link = false, noBorder = false, theme }: {
+  title: string; body: string; open: boolean; onToggle: () => void;
+  link?: boolean; noBorder?: boolean; theme: Theme;
 }) {
   return (
-    <View style={[acc.row, noBorder && { borderTopWidth: 0 }]}>
+    <View style={[acc.row, noBorder && { borderTopWidth: 0 }, { borderTopColor: theme.outlineVariant }]}>
       <TouchableOpacity style={acc.header} onPress={onToggle} activeOpacity={0.7}>
-        <Text style={acc.title}>{title}</Text>
+        <Text style={[acc.title, { color: theme.onSurface }]}>{title}</Text>
         <View style={acc.icons}>
-          {link && <Text style={acc.linkIcon}>↗</Text>}
-          <Text style={acc.chevron}>{open ? '⌃' : '⌄'}</Text>
+          {link && <Text style={[acc.linkIcon, { color: theme.primary }]}>↗</Text>}
+          <Text style={[acc.chevron, { color: theme.onSurfaceVariant }]}>{open ? '⌃' : '⌄'}</Text>
         </View>
       </TouchableOpacity>
-      {open && <Text style={acc.body}>{body}</Text>}
+      {open && <Text style={[acc.body, { color: theme.onSurfaceVariant }]}>{body}</Text>}
     </View>
   );
 }
 
 const acc = StyleSheet.create({
-  row:     { borderTopWidth: 1, borderTopColor: M3.outlineVariant, paddingVertical: 4 },
-  header:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12 },
-  title:   { fontSize: 15, fontWeight: '500', color: M3.onSurface, flex: 1 },
-  icons:   { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  linkIcon:{ fontSize: 14, color: M3.primary },
-  chevron: { fontSize: 18, color: M3.onSurfaceVariant },
-  body:    { fontSize: 14, lineHeight: 22, color: M3.onSurfaceVariant, paddingBottom: 12 },
+  row:      { borderTopWidth: 1, paddingVertical: 4 },
+  header:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12 },
+  title:    { fontSize: 15, fontWeight: '500', flex: 1 },
+  icons:    { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  linkIcon: { fontSize: 14 },
+  chevron:  { fontSize: 18 },
+  body:     { fontSize: 14, lineHeight: 22, paddingBottom: 12 },
 });
 
 // ── HomeScreen ────────────────────────────────────────────────────────
 export default function HomeScreen() {
+  const systemScheme = useColorScheme();
+
+  const [scheme, setScheme] = useState<ColorScheme>(() => {
+    if (typeof localStorage !== 'undefined') {
+      const saved = localStorage.getItem('mahaindex_scheme');
+      if (saved === 'light' || saved === 'dark') return saved;
+    }
+    return systemScheme === 'dark' ? 'dark' : 'light';
+  });
+
   const [lang, setLang] = useState<Lang>(() => {
     if (typeof localStorage !== 'undefined') return (localStorage.getItem('mahaindex_lang') as Lang) || 'en';
     return 'en';
@@ -369,9 +423,14 @@ export default function HomeScreen() {
   const [searchResults, setSearchResults] = useState<GeoResult[]>([]);
   const [searching,     setSearching]     = useState(false);
 
-  const tr = TR[lang];
+  const theme  = THEME[scheme];
+  const tr     = TR[lang];
+  const isDark = scheme === 'dark';
 
-  // Persist language choice
+  useEffect(() => {
+    if (typeof localStorage !== 'undefined') localStorage.setItem('mahaindex_scheme', scheme);
+  }, [scheme]);
+
   useEffect(() => {
     if (typeof localStorage !== 'undefined') localStorage.setItem('mahaindex_lang', lang);
   }, [lang]);
@@ -388,8 +447,7 @@ export default function HomeScreen() {
   }, []);
 
   const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+    setLoading(true); setError(null);
     try {
       let lat: number, lon: number, ipCity: string | undefined;
       if (Platform.OS === 'web') {
@@ -413,16 +471,11 @@ export default function HomeScreen() {
   const loadCity = useCallback(async (lat: number, lon: number, name: string) => {
     setShowSearch(false); setSearchQuery(''); setSearchResults([]);
     setLoading(true); setError(null);
-    try {
-      await fetchUV(lat, lon, name);
-    } catch {
-      setError('Could not fetch UV data.\nCheck your connection and try again.');
-    } finally {
-      setLoading(false);
-    }
+    try { await fetchUV(lat, lon, name); }
+    catch { setError('Could not fetch UV data.\nCheck your connection and try again.'); }
+    finally { setLoading(false); }
   }, [fetchUV]);
 
-  // Debounced city search
   useEffect(() => {
     if (searchQuery.trim().length < 2) { setSearchResults([]); return; }
     setSearching(true);
@@ -441,23 +494,23 @@ export default function HomeScreen() {
 
   if (loading) {
     return (
-      <View style={s.center}>
-        <ActivityIndicator size="large" color={M3.primary} />
-        <Text style={s.loadText}>{tr.findingSun}</Text>
-        <StatusBar style="dark" />
+      <View style={[s.center, { backgroundColor: theme.background }]}>
+        <ActivityIndicator size="large" color={theme.primary} />
+        <Text style={[s.loadText, { color: theme.onSurfaceVariant }]}>{tr.findingSun}</Text>
+        <StatusBar style={isDark ? 'light' : 'dark'} />
       </View>
     );
   }
 
   if (error || !forecasts.length) {
     return (
-      <View style={s.center}>
+      <View style={[s.center, { backgroundColor: theme.background }]}>
         <Text style={{ fontSize: 56 }}>☁️</Text>
-        <Text style={[s.loadText, { textAlign: 'center' }]}>{error}</Text>
-        <TouchableOpacity style={s.retryBtn} onPress={load}>
+        <Text style={[s.loadText, { color: theme.onSurfaceVariant, textAlign: 'center' }]}>{error}</Text>
+        <TouchableOpacity style={[s.retryBtn, { backgroundColor: theme.primary }]} onPress={load}>
           <Text style={s.retryLabel}>{tr.tryAgain}</Text>
         </TouchableOpacity>
-        <StatusBar style="dark" />
+        <StatusBar style={isDark ? 'light' : 'dark'} />
       </View>
     );
   }
@@ -473,40 +526,48 @@ export default function HomeScreen() {
     : tr.lowUVDay;
 
   return (
-    <View style={[s.page, rtl as any]}>
-      <StatusBar style="dark" />
+    <View style={[s.page, { backgroundColor: theme.background }, rtl as any]}>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
       <ScrollView style={{ flex: 1 }} contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={s.inner}>
 
           {/* ── App bar ── */}
           {showSearch ? (
-            <View style={s.searchBar}>
+            <View style={[s.searchBar, { backgroundColor: theme.surface }, theme.cardShadow]}>
               <Text style={s.searchIcon}>🔍</Text>
               <TextInput
-                style={s.searchInput}
+                style={[s.searchInput, { color: theme.onSurface }]}
                 placeholder={tr.searchCity}
-                placeholderTextColor={M3.onSurfaceVariant}
+                placeholderTextColor={theme.onSurfaceVariant}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
                 autoFocus
               />
               {searching
-                ? <ActivityIndicator size="small" color={M3.primary} />
+                ? <ActivityIndicator size="small" color={theme.primary} />
                 : <TouchableOpacity onPress={() => { setShowSearch(false); setSearchQuery(''); setSearchResults([]); }}>
-                    <Text style={s.searchClose}>✕</Text>
+                    <Text style={[s.searchClose, { color: theme.onSurfaceVariant }]}>✕</Text>
                   </TouchableOpacity>
               }
             </View>
           ) : (
             <View style={s.appBar}>
-              <Text style={s.appBarTitle}>{tr.appName}</Text>
+              <Text style={[s.appBarTitle, { color: theme.onSurface }]}>{tr.appName}</Text>
               <View style={s.appBarActions}>
+                {/* Dark / light toggle */}
+                <TouchableOpacity
+                  style={[s.iconBtn, { backgroundColor: theme.surfaceVariant }]}
+                  onPress={() => setScheme(isDark ? 'light' : 'dark')}
+                  hitSlop={8}
+                >
+                  <Text style={s.iconBtnText}>{isDark ? '☀️' : '🌙'}</Text>
+                </TouchableOpacity>
                 {/* Language toggle */}
                 <TouchableOpacity
-                  style={s.langBtn}
+                  style={[s.langBtn, { backgroundColor: theme.primaryContainer }]}
                   onPress={() => setLang(lang === 'en' ? 'he' : 'en')}
                 >
-                  <Text style={s.langBtnText}>{lang === 'en' ? 'עב' : 'EN'}</Text>
+                  <Text style={[s.langBtnText, { color: theme.onPrimaryContainer }]}>{lang === 'en' ? 'עב' : 'EN'}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity onPress={() => setShowSearch(true)} hitSlop={12}>
                   <Text style={s.searchIconBtn}>🔍</Text>
@@ -517,10 +578,10 @@ export default function HomeScreen() {
 
           {/* ── Search results ── */}
           {showSearch && (
-            <View style={s.card}>
+            <View style={[s.card, { backgroundColor: theme.surface }, theme.cardShadow]}>
               <TouchableOpacity style={s.resultRow} onPress={() => { setShowSearch(false); setSearchQuery(''); setSearchResults([]); load(); }}>
                 <Text style={s.resultIcon}>📍</Text>
-                <Text style={[s.resultName, { color: M3.primary }]}>{tr.useMyLocation}</Text>
+                <Text style={[s.resultName, { color: theme.primary }]}>{tr.useMyLocation}</Text>
               </TouchableOpacity>
               {searchResults.map((r, i) => {
                 const subtitle = [r.admin1, r.country].filter(Boolean).join(', ');
@@ -528,26 +589,26 @@ export default function HomeScreen() {
                 return (
                   <TouchableOpacity
                     key={r.id}
-                    style={[s.resultRow, i > 0 && { borderTopWidth: 1, borderTopColor: M3.outlineVariant }]}
+                    style={[s.resultRow, i > 0 && { borderTopWidth: 1, borderTopColor: theme.outlineVariant }]}
                     onPress={() => loadCity(r.latitude, r.longitude, label)}
                   >
                     <Text style={s.resultIcon}>🏙</Text>
                     <View style={{ flex: 1 }}>
-                      <Text style={s.resultName}>{r.name}</Text>
-                      <Text style={s.resultSub}>{subtitle}</Text>
+                      <Text style={[s.resultName, { color: theme.onSurface }]}>{r.name}</Text>
+                      <Text style={[s.resultSub, { color: theme.onSurfaceVariant }]}>{subtitle}</Text>
                     </View>
                   </TouchableOpacity>
                 );
               })}
               {searchQuery.length >= 2 && !searching && searchResults.length === 0 && (
-                <Text style={s.noResults}>{tr.noCities}</Text>
+                <Text style={[s.noResults, { color: theme.onSurfaceVariant }]}>{tr.noCities}</Text>
               )}
             </View>
           )}
 
           {/* ── Card A: Hero ── */}
-          <View style={s.card}>
-            <Text style={s.cardLabel}>{tr.currentUV}</Text>
+          <View style={[s.card, { backgroundColor: theme.surface }, theme.cardShadow]}>
+            <Text style={[s.cardLabel, { color: theme.onSurfaceVariant }]}>{tr.currentUV}</Text>
             <View style={s.heroRow}>
               <View style={{ flex: 1 }}>
                 <Text style={[s.heroNumber, { color: heroMeta.uvColor }]}>{currentUV}</Text>
@@ -555,26 +616,30 @@ export default function HomeScreen() {
               </View>
               <SunIcon size={80} color={heroMeta.uvColor} />
             </View>
-            <View style={s.heroDivider} />
-            <Text style={s.heroMeta}>{city ? `${city}  •  ` : ''}{longDate(day.date, lang)}</Text>
+            <View style={[s.heroDivider, { backgroundColor: theme.outlineVariant }]} />
+            <Text style={[s.heroMeta, { color: theme.onSurfaceVariant }]}>
+              {city ? `${city}  •  ` : ''}{longDate(day.date, lang)}
+            </Text>
           </View>
 
           {/* ── Card B: Daily Forecast ── */}
-          <View style={s.card}>
-            <Text style={s.cardTitle}>{tr.dailyForecast}</Text>
+          <View style={[s.card, { backgroundColor: theme.surface }, theme.cardShadow]}>
+            <Text style={[s.cardTitle, { color: theme.onSurface }]}>{tr.dailyForecast}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginVertical: 16 }}>
               <View style={s.dayRow}>
                 {forecasts.map((f, i) => {
                   const sel = i === selectedDay;
                   return (
                     <TouchableOpacity key={f.dateStr} style={s.dayCol} onPress={() => setSelectedDay(i)}>
-                      <Text style={[s.dayLetter, sel && s.dayLetterSel]}>
+                      <Text style={[s.dayLetter, { color: sel ? theme.onPrimaryContainer : theme.onSurfaceVariant }]}>
                         {tr.dayLetters[f.date.getDay()]}
                       </Text>
                       {sel ? (
-                        <View style={s.selChip}><Text style={s.selChipNum}>{f.date.getDate()}</Text></View>
+                        <View style={[s.selChip, { backgroundColor: theme.primaryContainer }]}>
+                          <Text style={[s.selChipNum, { color: theme.onPrimaryContainer }]}>{f.date.getDate()}</Text>
+                        </View>
                       ) : (
-                        <Text style={s.dayNum}>{f.date.getDate()}</Text>
+                        <Text style={[s.dayNum, { color: theme.onSurface }]}>{f.date.getDate()}</Text>
                       )}
                     </TouchableOpacity>
                   );
@@ -582,25 +647,25 @@ export default function HomeScreen() {
               </View>
             </ScrollView>
             <View onLayout={e => setChartWidth(e.nativeEvent.layout.width)} style={{ width: '100%' }}>
-              {chartWidth > 0 && <UVChart hourly={day.hourly} width={chartWidth} lang={lang} />}
+              {chartWidth > 0 && <UVChart hourly={day.hourly} width={chartWidth} lang={lang} theme={theme} />}
             </View>
           </View>
 
           {/* ── Card C: Protection ── */}
-          <View style={[s.card, s.protCard]}>
+          <View style={[s.card, { backgroundColor: theme.tonal }, theme.cardShadow]}>
             <View style={s.protRow}>
               <Text style={s.protIcon}>🧢</Text>
-              <Text style={s.protText}>{protText}</Text>
+              <Text style={[s.protText, { color: theme.onSurface }]}>{protText}</Text>
             </View>
           </View>
 
           {/* ── Card D: About ── */}
-          <View style={s.card}>
-            <Text style={s.cardTitle}>{tr.aboutTitle}</Text>
+          <View style={[s.card, { backgroundColor: theme.surface }, theme.cardShadow]}>
+            <Text style={[s.cardTitle, { color: theme.onSurface }]}>{tr.aboutTitle}</Text>
             <View style={{ marginTop: 8 }}>
-              <AccordionRow title={tr.whoTitle} body={tr.whoBody} open={openAccordion === 0} onToggle={() => setOpenAccordion(openAccordion === 0 ? -1 : 0)} link noBorder />
-              <AccordionRow title={tr.skinTitle} body={tr.skinBody} open={openAccordion === 1} onToggle={() => setOpenAccordion(openAccordion === 1 ? -1 : 1)} />
-              <AccordionRow title={tr.effectsTitle} body={tr.effectsBody} open={openAccordion === 2} onToggle={() => setOpenAccordion(openAccordion === 2 ? -1 : 2)} />
+              <AccordionRow title={tr.whoTitle}     body={tr.whoBody}     open={openAccordion === 0} onToggle={() => setOpenAccordion(openAccordion === 0 ? -1 : 0)} link noBorder theme={theme} />
+              <AccordionRow title={tr.skinTitle}    body={tr.skinBody}    open={openAccordion === 1} onToggle={() => setOpenAccordion(openAccordion === 1 ? -1 : 1)} theme={theme} />
+              <AccordionRow title={tr.effectsTitle} body={tr.effectsBody} open={openAccordion === 2} onToggle={() => setOpenAccordion(openAccordion === 2 ? -1 : 2)} theme={theme} />
             </View>
           </View>
 
@@ -610,53 +675,54 @@ export default function HomeScreen() {
   );
 }
 
+// ── Styles (layout only — colors applied inline) ───────────────────────
 const s = StyleSheet.create({
-  page:          { flex: 1, backgroundColor: M3.background },
+  page:          { flex: 1 },
   scrollContent: { flexGrow: 1 },
   inner:         { maxWidth: 700, alignSelf: 'center', width: '100%', padding: 16, gap: 12 },
 
   appBar:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 4 },
-  appBarTitle:   { fontSize: 22, fontWeight: '600', color: M3.onSurface, letterSpacing: 0.15 },
-  appBarActions: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  langBtn:       { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: M3.primaryContainer },
-  langBtnText:   { fontSize: 13, fontWeight: '600', color: M3.onPrimaryContainer },
+  appBarTitle:   { fontSize: 22, fontWeight: '600', letterSpacing: 0.15 },
+  appBarActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  iconBtn:       { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  iconBtnText:   { fontSize: 16 },
+  langBtn:       { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 },
+  langBtnText:   { fontSize: 13, fontWeight: '600' },
   searchIconBtn: { fontSize: 20 },
 
-  card:          { backgroundColor: M3.surface, borderRadius: 16, padding: 20, ...CARD_SHADOW },
-  cardLabel:     { fontSize: 11, fontWeight: '500', color: M3.onSurfaceVariant, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 12 },
-  cardTitle:     { fontSize: 20, fontWeight: '500', color: M3.onSurface, letterSpacing: 0.15 },
+  card:          { borderRadius: 16, padding: 20 },
+  cardLabel:     { fontSize: 11, fontWeight: '500', letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 12 },
+  cardTitle:     { fontSize: 20, fontWeight: '500', letterSpacing: 0.15 },
 
   heroRow:       { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
   heroNumber:    { fontSize: 80, fontWeight: '300', lineHeight: 88, letterSpacing: -1 },
   heroLabel:     { fontSize: 22, fontWeight: '500', letterSpacing: 0.15, marginTop: 2 },
-  heroDivider:   { height: 1, backgroundColor: M3.outlineVariant, marginVertical: 16 },
-  heroMeta:      { fontSize: 14, color: M3.onSurfaceVariant, letterSpacing: 0.25 },
+  heroDivider:   { height: 1, marginVertical: 16 },
+  heroMeta:      { fontSize: 14, letterSpacing: 0.25 },
 
   dayRow:        { flexDirection: 'row', gap: 8, paddingHorizontal: 2 },
   dayCol:        { alignItems: 'center', gap: 6, minWidth: 44 },
-  dayLetter:     { fontSize: 13, fontWeight: '500', color: M3.onSurfaceVariant },
-  dayLetterSel:  { color: M3.onPrimaryContainer },
-  dayNum:        { fontSize: 16, color: M3.onSurface, fontWeight: '400', paddingVertical: 10 },
-  selChip:       { width: 40, height: 40, borderRadius: 20, backgroundColor: M3.primaryContainer, alignItems: 'center', justifyContent: 'center' },
-  selChipNum:    { fontSize: 16, fontWeight: '600', color: M3.onPrimaryContainer },
+  dayLetter:     { fontSize: 13, fontWeight: '500' },
+  dayNum:        { fontSize: 16, fontWeight: '400', paddingVertical: 10 },
+  selChip:       { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  selChipNum:    { fontSize: 16, fontWeight: '600' },
 
-  protCard:      { backgroundColor: M3.tonal },
   protRow:       { flexDirection: 'row', alignItems: 'flex-start', gap: 14 },
   protIcon:      { fontSize: 24, marginTop: 2 },
-  protText:      { flex: 1, fontSize: 14, lineHeight: 22, color: M3.onSurface },
+  protText:      { flex: 1, fontSize: 14, lineHeight: 22 },
 
-  searchBar:     { flexDirection: 'row', alignItems: 'center', backgroundColor: M3.surface, borderRadius: 28, paddingHorizontal: 16, paddingVertical: 10, gap: 10, ...CARD_SHADOW },
+  searchBar:     { flexDirection: 'row', alignItems: 'center', borderRadius: 28, paddingHorizontal: 16, paddingVertical: 10, gap: 10 },
   searchIcon:    { fontSize: 16 },
-  searchInput:   { flex: 1, fontSize: 16, color: M3.onSurface, outlineStyle: 'none' } as any,
-  searchClose:   { fontSize: 16, color: M3.onSurfaceVariant, paddingLeft: 4 },
+  searchInput:   { flex: 1, fontSize: 16, outlineStyle: 'none' } as any,
+  searchClose:   { fontSize: 16, paddingLeft: 4 },
   resultRow:     { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, gap: 14 },
   resultIcon:    { fontSize: 18, width: 24, textAlign: 'center' },
-  resultName:    { fontSize: 15, fontWeight: '500', color: M3.onSurface },
-  resultSub:     { fontSize: 13, color: M3.onSurfaceVariant, marginTop: 1 },
-  noResults:     { fontSize: 14, color: M3.onSurfaceVariant, paddingVertical: 12, textAlign: 'center' },
+  resultName:    { fontSize: 15, fontWeight: '500' },
+  resultSub:     { fontSize: 13, marginTop: 1 },
+  noResults:     { fontSize: 14, paddingVertical: 12, textAlign: 'center' },
 
-  center:        { flex: 1, backgroundColor: M3.background, alignItems: 'center', justifyContent: 'center', gap: 16, padding: 32 },
-  loadText:      { fontSize: 16, color: M3.onSurfaceVariant },
-  retryBtn:      { backgroundColor: M3.primary, paddingHorizontal: 28, paddingVertical: 12, borderRadius: 24, marginTop: 8 },
+  center:        { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, padding: 32 },
+  loadText:      { fontSize: 16 },
+  retryBtn:      { paddingHorizontal: 28, paddingVertical: 12, borderRadius: 24, marginTop: 8 },
   retryLabel:    { color: '#fff', fontSize: 15, fontWeight: '600' },
 });
